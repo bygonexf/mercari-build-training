@@ -3,9 +3,15 @@ import logging
 import pathlib
 import json
 import hashlib
-from fastapi import FastAPI, Form, HTTPException, UploadFile
+from typing import List
+from fastapi import FastAPI, Form, HTTPException, UploadFile, Depends
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
+
+import schemas
+import dal
+from database import SessionLocal
 
 app = FastAPI()
 logger = logging.getLogger("uvicorn")
@@ -21,29 +27,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-itemFile = curDir / "items.json"
-if os.stat(itemFile).st_size != 0:
-    items = json.loads(itemFile.read_text(encoding="utf-8"))
-else:
-    items = {"items": []}
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 @app.get("/")
 def root():
     return {"message": "Hello, world!"}
 
 @app.get("/items")
-def get_items():
-    items = json.loads(itemFile.read_text(encoding="utf-8"))
-    return items
+def get_items(db: Session = Depends(get_db)):
+    items = dal.getItems(db)
 
-@app.get("/items/{idFrom1}")
-def get_item(idFrom1: int):
-    items = json.loads(itemFile.read_text(encoding="utf-8"))
-    return items["items"][idFrom1-1]
+    return [r._asdict() for r in items]
+
+@app.get("/items/search")
+def get_items_by_search(keyword: str, db: Session = Depends(get_db)):
+    items = dal.getItemsBySearch(db, keyword)
+
+    return [r._asdict() for r in items]
 
 
-@app.post("/items")
-def add_item(name: str = Form(...), category: str = Form(...), image: UploadFile = Form(...)):
+@app.post("/items", response_model=schemas.Item)
+def add_item(name: str = Form(...), category_id: int = Form(...), image: UploadFile = Form(...), db: Session = Depends(get_db)):
     logger.info(f"Receive item: {name}")
 
     imageBytes = image.file.read()
@@ -53,9 +62,9 @@ def add_item(name: str = Form(...), category: str = Form(...), image: UploadFile
     hashedImgPath.touch(exist_ok= True)
     hashedImgPath.write_bytes(imageBytes)
 
-    items["items"].append({"name": name, "category": category, "image": hashedImgName})
-    itemFile.write_text(json.dumps(items), encoding='utf-8')
-    return {"message": f"item received: {name}"}
+    curItem = schemas.ItemCreate(name=name, category_id=category_id, image_name=hashedImgName)
+    createdItem = dal.createItem(db, curItem)
+    return createdItem
 
 
 @app.get("/image/{image_name}")
