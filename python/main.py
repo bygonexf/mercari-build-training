@@ -21,7 +21,8 @@ images = curDir / "images"
 origins = [os.environ.get("FRONT_URL", "http://localhost:3000")]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
+    #allow_origins=origins,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
@@ -41,18 +42,20 @@ def root():
 @app.get("/items")
 def get_items(db: Session = Depends(get_db)):
     items = dal.getItems(db)
+    itemList = [r._asdict() for r in items]
 
-    return [r._asdict() for r in items]
+    return json.dumps({"items": itemList})
 
 @app.get("/items/search")
 def get_items_by_search(keyword: str, db: Session = Depends(get_db)):
     items = dal.getItemsBySearch(db, keyword)
+    itemList = [r._asdict() for r in items]
 
-    return [r._asdict() for r in items]
+    return json.dumps({"items": itemList})
 
 
 @app.post("/items", response_model=schemas.Item)
-def add_item(name: str = Form(...), category_id: int = Form(...), image: UploadFile = Form(...), db: Session = Depends(get_db)):
+def add_item(name: str = Form(...), category: str = Form(...), image: UploadFile = Form(...), db: Session = Depends(get_db)):
     logger.info(f"Receive item: {name}")
 
     imageBytes = image.file.read()
@@ -62,7 +65,12 @@ def add_item(name: str = Form(...), category_id: int = Form(...), image: UploadF
     hashedImgPath.touch(exist_ok= True)
     hashedImgPath.write_bytes(imageBytes)
 
-    curItem = schemas.ItemCreate(name=name, category_id=category_id, image_name=hashedImgName)
+    curCategory = dal.getCategoryByName(db, category)
+    if not curCategory:
+        curCategory = schemas.CategoryCreate(name=category)
+        curCategory = dal.createCategory(db, curCategory)
+
+    curItem = schemas.ItemCreate(name=name, category_id=curCategory.id, image_name=hashedImgName)
     createdItem = dal.createItem(db, curItem)
     return createdItem
 

@@ -21,3 +21,6 @@ class Category(CategoryBase):
     id: Optional[int]
     class Config:
         from_attributes = True
+
+class CategoryCreate(CategoryBase):
+    pass
