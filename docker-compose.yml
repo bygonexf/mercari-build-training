@@ -1,0 +1,21 @@
+version: "3"
+services:
+  app:
+    build: ./python
+    image: build2024/app:latest
+    ports:
+      - 9000:9000
+    environment:
+      - SQLITE_PATH=./data/mercari.sqlite3
+      - FRONT_URL=http://localhost:3000
+    volumes:
+      - ./db/mercari.sqlite3:/app/data/mercari.sqlite3:z
+  web:
+    build: ./typescript/simple-mercari-web
+    image: build2024/web:latest
+    depends_on:
+      - app
+    ports:
+      - 3000:3000
+    environment:
+      - REACT_APP_API_URL=http://localhost:9000
